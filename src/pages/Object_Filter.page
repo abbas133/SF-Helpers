@@ -1,0 +1,227 @@
+<apex:page controller="Object_Filter_Controller">
+
+<apex:includeScript value="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"/>
+    <apex:includeScript value="//ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/jquery-ui.js" />
+    <apex:stylesheet value="https://ajax.googleapis.com/ajax/libs/jqueryui/1.8.18/themes/smoothness/jquery-ui.css" />
+    <apex:includeScript value="//cdnjs.cloudflare.com/ajax/libs/jquery.blockUI/2.66.0-2013.10.09/jquery.blockUI.min.js"/>
+    <apex:sectionHeader title="Generic Object Filter" />
+
+    <style type="text/css">
+.labelCol {
+    vertical-align: middle !important;
+}
+
+.sponsorship_manage td.actionColumn {
+    width : 5%;
+}
+.sponsorship_manage .totalRow,.totalCell {
+    border: none !important;
+    background-color: #F2F3F3 !important;
+}
+</style>
+
+
+    <apex:form id="mainForm" styleClass="sponsorship_manage">
+        <apex:pageMessages id="pg-msg" />
+        <apex:outputPanel >
+            <apex:actionstatus id="processing" stopText="" onStart="blockUnblockUI(true);" onStop="blockUnblockUI(false);">
+            </apex:actionstatus>
+        </apex:outputPanel>
+
+        <apex:pageBlock mode="edit" rendered="true">
+
+            <apex:pageBlockSection collapsible="false" columns="1">
+                <apex:selectRadio value="{!filterType}" layout="lineDirection" label="Select Object Type : ">
+                    <apex:selectOption itemValue="standard" itemLabel="Standard Objects"/>
+                    <apex:selectOption itemValue="custom" itemLabel="Custom Objects"/>
+                    <apex:selectOption itemValue="both" itemLabel="Standard And Custom Objects"/>
+                    <apex:actionSupport event="onchange" rerender="mainForm, Object filter, onloadScript, selectSObject" status="processing"/>
+                </apex:selectRadio>
+            </apex:pageBlockSection>
+
+            <apex:outputPanel style="{!IF(filterType!= null, '', 'display:none;')}">
+            <apex:pageBlockSection collapsible="false" columns="1">
+                <apex:selectList id="selectSObject" label="Select Object : " value="{!selectedSObject}" size="1">
+                    <apex:selectOptions value="{!sObjectSelectList}">
+                    </apex:selectOptions>
+                    <apex:actionSupport event="onchange" action="{!initialize}" rerender="mainForm, onloadScript, filterCriteria, result-panel, advancedfilterLogic" status="processing"/>
+                </apex:selectList>
+            </apex:pageBlockSection>
+            </apex:outputPanel>
+
+            <apex:pageBlockSection collapsible="false" columns="1">
+                <apex:outputPanel id="filterCriteria" style="{!IF(selectedSObject != null, '', 'display:none;')}">
+                    <div style="width : 700px;">
+                        <table>
+                            <tr>
+                                <th>&nbsp;&nbsp;&nbsp;&nbsp;Field</th>
+                                <th>&nbsp;&nbsp;Operator</th>
+                                <th>&nbsp;&nbsp;Value</th>
+                                <th>&nbsp;</th>
+                            </tr>
+                            <apex:variable var="objectRowCount" value="{!1}" />
+                            <apex:repeat value="{!objectCriteriaList}" var="objectCriteria">
+                                <tr>
+                                    <td>
+                                        <apex:outputLabel value="{!objectRowCount}" rendered="{!isAdvancedFilterLogicOn}">.</apex:outputLabel>&nbsp;&nbsp;
+                                        <apex:actionRegion >
+                                            <apex:selectList value="{!objectCriteria.fieldName}" size="1" style="width:150px">
+                                                <apex:selectOptions value="{!objectFieldSelectOptionList}"/>
+                                                <apex:actionSupport event="onchange" rerender="objectFieldValueId, objectSelectList, onloadScript" action="{!resetOperatorsForObjectCriteria}" status="setObjectCriteriaStatus">
+                                                    <apex:param name="index" value="{!objectRowCount}" />
+                                                </apex:actionSupport>
+                                            </apex:selectList>
+                                            <apex:actionStatus id="setObjectCriteriaStatus">
+                                                <apex:facet name="start">
+                                                    <apex:image value="/img/loading.gif" style="vertical-align: middle; padding-left: 1em;" />
+                                                </apex:facet>
+                                            </apex:actionStatus>
+                                        </apex:actionRegion>
+                                    </td>
+                                    <td>
+                                        <apex:selectList value="{!objectCriteria.operator}" size="1" id="objectSelectList" style="width:150px">
+                                            <apex:selectOptions value="{!objectCriteria.operators}" />
+                                        </apex:selectList>
+                                    </td>
+                                    <td>
+                                        <apex:outputPanel id="objectFieldValueId">
+                                            <apex:inputText rendered="{!objectCriteria.fieldName == null}" styleClass="objectfieldValue" style="width:150px;"/>
+                                            <apex:inputField value="{!objectCriteria.selectedObject[objectCriteria.fieldName]}" styleClass="objectfieldValue" rendered="{!AND(objectCriteria.fieldName != null, objectCriteria.fieldName != 'rc_bios__age__c')}" required="false" style="width:150px;"/>
+                                            <apex:inputText value="{!objectCriteria.selectedObject[objectCriteria.fieldName]}" styleClass="objectfieldValue" rendered="{!objectCriteria.fieldName == 'rc_bios__age__c'}" required="false" style="width:150px;"/>
+                                        </apex:outputPanel>
+                                        &nbsp;
+                                        <apex:outputLabel value="AND" rendered="{!AND(objectRowCount != objectCriteriaList.size, NOT(isAdvancedFilterLogicOn))}"/>
+                                    </td>
+                                </tr>
+                                <apex:variable var="objectRowCount" value="{!objectRowCount + 1}"/>
+                            </apex:repeat>
+                            <tr>
+                                <td>
+                                    <apex:outputPanel >
+                                        <apex:commandButton value="Add Row" action="{!addObjectCriteriaRow}" rerender="filterCriteria, onloadScript" status="processing" disabled="{!objectCriteriaList.size == 10}" />
+                                        <apex:commandButton value="Remove Row" action="{!removeObjectCriteriaRow}" rerender="filterCriteria, onloadScript" status="processing" disabled="{!objectCriteriaList.size == 1}" />
+                                    </apex:outputPanel>
+                                </td>
+                                <td></td>
+                                <td>
+                                    <apex:outputPanel >
+                                        <apex:commandButton styleClass="searchButton" value="Search" action="{!initializeObjectList}" rerender="countBlankError, pg-msg, onloadScript, filterError, advancedfilterLogic, filterCriteria, result-panel" status="processing" >
+                                            <apex:param name="error" value="catchError" />
+                                        </apex:commandButton>
+                                        <apex:commandButton action="{!initialize}" value="Clear Filters" rerender=" onloadScript, pg-msg, filterCriteria, result-panel" status="processing">
+                                            <apex:param name="filter" value="filterCriteria"/>
+                                        </apex:commandButton>
+                                    </apex:outputPanel>
+
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+
+                                    <apex:commandLink action="{!unSetAdvancedFilterLogic}" value="Clear Filter Logic" rendered="{!isAdvancedFilterLogicOn}" rerender="filterCriteria, advancedfilterLogic" status="fieldStatus" />
+                                    <apex:commandLink action="{!setAdvancedFilterLogic}" value="Add Filter Logic" rendered="{!NOT(isAdvancedFilterLogicOn)}" rerender="filterCriteria, advancedfilterLogic" status="fieldStatus" />
+                                    <br/><br/>
+                                    <apex:actionStatus id="fieldStatus">
+                                        <apex:facet name="start">
+                                            <apex:image value="/img/loading.gif" style="vertical-align: middle !important;" />
+                                        </apex:facet>
+                                    </apex:actionStatus>
+                                </td>
+                                <td></td>
+                            </tr>
+                        </table>
+                    </div>
+                </apex:outputPanel>
+            </apex:pageBlockSection>
+
+            <apex:outputPanel id="advancedfilterLogic" >
+                <apex:pageBlockSection rendered="{!isAdvancedFilterLogicOn}"  columns="1">
+                    <apex:outputLabel value="Filter Logic:"/>
+                    <apex:inputText value="{!filterLogicString}" id="theTextInput" size="85" maxlength="120"/>
+                    <apex:outputLabel id="filterError" value="Error: {!filterLogicError}" styleClass="errorMsg" rendered="{!isFilterError}"/>
+                    <apex:image width="533" height="211" title="Boolean Filters Help" alt="Boolean Filters Help" value="/img/report_boolean_filter.gif"/>
+                </apex:pageBlockSection>
+            </apex:outputPanel>
+
+            <apex:outputPanel id="result-panel" style="{!IF(objectToShowList.size != null, '', 'display:none;')}">
+            <apex:pageBlock mode="edit" rendered="{!objectToShowList.size !=0}" >
+                <apex:pageBlockSection collapsible="false" rendered="true" columns="1">
+                    <apex:pageBlockSectionItem >
+                        <apex:pageBlockTable id="resultTable" value="{!objectToShowList}" var="recordList" rendered="{!objectToShowList.size !=0}" >
+
+                            <apex:column headerClass="actionColumn" styleClass="actionColumn">
+                                <apex:facet name="header">
+                                    <input type = "checkbox" class="headerRecordCheckbox" />
+                                </apex:facet>
+                                <apex:inputCheckbox value="{!recordList.checked}" styleClass="objectCheckbox" />
+                            </apex:column>
+
+                            <apex:repeat var="varfield" value="{!selectedFieldList}">
+                                <apex:column >
+                                    <apex:facet name="header">
+                                        <apex:outputLabel value="{!$ObjectType[selectedSObject].fields[varfield].Label}"/>
+                                    </apex:facet>
+                                    <apex:outputField value="{!recordList.objectToShow[varfield]}" styleClass="objectToShow" />
+                                </apex:column>
+                            </apex:repeat>
+                        </apex:pageBlockTable>
+                    </apex:pageBlockSectionItem>
+
+                    <apex:pageBlockSectionItem rendered="{!total_size != null}">
+                        <apex:panelGrid columns="10">
+                            <apex:actionRegion >
+                                <apex:outputLabel value="Show : " for="list_size" />
+                                <apex:selectList value="{!list_size}" size="1" id="list_size">
+                                    <apex:selectOptions value="{!pageSizeOptionList}" />
+                                    <apex:actionSupport event="onchange" rerender="result-panel" action="{!initializeObjectList}" status="renderPageSizeStatus" />
+                                </apex:selectList>
+                                <apex:actionStatus id="renderPageSizeStatus">
+                                    <apex:facet name="start">
+                                        <apex:image value="/img/loading.gif" style="vertical-align: middle; padding-left: 1em;" />
+                                    </apex:facet>
+                                </apex:actionStatus>
+                            </apex:actionRegion>
+<!--                                 <apex:facet name="footer">Showing Page # {!pageNumber} of {!totalPages}</apex:facet> -->
+
+                            <apex:actionStatus id="navigateStatus">
+                                <apex:facet name="stop">
+                                    <apex:outputPanel id="navigateButtons" >
+                                        <apex:commandButton action="{!Beginning}" title="Beginning" value="<<" disabled="{!disablePrevious}" reRender="result-panel,navigateButtons"/>
+                                        <apex:commandButton action="{!Previous}" title="Previous" value="<" disabled="{!disablePrevious}" reRender="result-panel,navigateButtons"/>
+                                        <apex:commandButton action="{!Next}" title="Next" value=">" disabled="{!disableNext}" reRender="result-panel,navigateButtons"/>
+                                        <apex:commandButton action="{!End}" title="End" value=">>" disabled="{!disableNext}" reRender="result-panel,navigateButtons"/>
+                                    </apex:outputPanel>
+                                </apex:facet>
+                                <apex:facet name="start">
+                                    <apex:image value="/img/loading.gif" style="vertical-align: middle; padding-left: 1em;" />
+                                </apex:facet>
+                            </apex:actionStatus>
+                        </apex:panelGrid>
+                    </apex:pageBlockSectionItem>
+                </apex:pageBlockSection>
+            </apex:pageBlock>
+
+        </apex:outputPanel>
+        </apex:pageBlock>
+    </apex:form>
+
+    <apex:outputPanel id="onloadScript">
+    <script type="text/javascript">
+        //Show processing image using BlockUI jquery plugin
+        function blockUnblockUI(flag) {
+           if(flag) {
+                $.blockUI({
+                    message: '<h1><img src="/img/loading.gif"/> Processing, Please wait...</h1>',
+                    css: {
+                        padding: '25px'
+                    }
+                });
+            } else {
+                $.unblockUI();
+            }
+        }
+
+    </script>
+    </apex:outputPanel>
+
+</apex:page>
